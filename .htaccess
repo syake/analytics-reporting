@@ -1,0 +1,9 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /analytics/reporting
+  
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule (page|region) report.php/?%{QUERY_STRING}&request=$1 [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule (day|week|month) date.php/?%{QUERY_STRING}&request=$1 [L]
+</IfModule>

@@ -1,0 +1,103 @@
+@charset "utf-8";
+/* CSS Document */
+
+/* basic
+-------------------------------------------*/
+@import url(http://fonts.googleapis.com/earlyaccess/notosansjp.css);
+
+html {
+  height: 100%;
+}
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 400;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f4f2f1;
+}
+main {
+  flex: 1;
+}
+footer {
+  color: #777;
+  width: 100%;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 20px 0;
+}
+footer p {
+  margin-bottom: 0.5rem;
+}
+
+/* nav
+-------------------------------------------*/
+header.navbar {
+  background-color: white;
+  box-shadow: 0 2px 10px 2px rgba(0,0,0,0.1);
+}
+header.navbar p.navbar-brand {
+  margin-bottom: 0;
+}
+
+/* main
+-------------------------------------------*/
+main {
+  padding-top: 96px;
+  padding-bottom: 20px;
+}
+
+/* dashboard
+-------------------------------------------*/
+.dashboard {
+  padding: 20px;
+  background-color: white;
+  border: 1px solid #d4d2d0;
+  border-radius: 4px;
+  margin-bottom: 2rem;
+}
+.dashboard p.address {
+  font-weight: 400;
+  font-size: 1.8rem;
+  color: #999;
+}
+.dashboard h2 {
+  font-weight: 200;
+  font-size: 2.0rem;
+  color: #565656;
+  margin-bottom: 1.5rem;
+  margin-left: 1rem;
+}
+.dashboard > *:last-child {
+  margin-bottom: 0;
+}
+.dashboard th {
+  font-weight: 300;
+  color: #666;
+}
+
+.dashboard table.table-rows td,
+.dashboard table.table-rows th {
+  font-size: 0.9rem;
+}
+.dashboard table.table-rows thead td,
+.dashboard table.table-rows thead th {
+  border: 0;
+  font-weight: 200;
+  color: #565656;
+}
+.dashboard table.table-rows td.total {
+  font-size: 1.4rem;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.dashboard table.table-rows th.num {
+  text-align: right;
+}
+.dashboard table.table-rows td {
+  text-align: right;
+}
+.dashboard table.table-rows small {
+  font-size: 0.75rem;
+  color: #b7b7b7;
+}
