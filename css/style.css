@@ -56,6 +56,10 @@ main {
   border-radius: 4px;
   margin-bottom: 2rem;
 }
+.dashboard small {
+  font-size: 0.75rem;
+  color: #b7b7b7;
+}
 .dashboard p.address {
   font-weight: 400;
   font-size: 1.8rem;

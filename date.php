@@ -2,7 +2,12 @@
 require_once __DIR__ . '/functions.php';
 
 // config
-$endDate = strtotime('-1 day');
+$date = strtotime('-1 day');
+$rangeDay = 6;
+$rangeMonth = NULL;
+$ageDay = NULL;
+$dateRange = NULL;
+$ageDateRange = NULL;
 
 // request
 $request = NULL;
@@ -12,18 +17,25 @@ if (isset($_GET['request'])) {
 switch ($request) {
   case 'day':
     $dimensionValue = 'ga:nthDay';
-    $ageTime = 7 * 24 * 60 * 60;
-    $startDate = $endDate - (6 * 24 * 60 * 60);
+    $startDate = strtotime("-{$rangeDay} day", $date);
+    $dateRange = [$startDate, $date];
+    
+    $ageDay = $rangeDay + 1;
+    $ageStartDate = strtotime("-{$ageDay} day", $startDate);
+    $ageEndDate = strtotime("-{$ageDay} day", $date);
+    $ageDateRange = [$ageStartDate, $ageEndDate];
     break;
   case 'week':
+    $rangeMonth = 3;
     $dimensionValue = 'ga:nthWeek';
-    $ageTime = NULL;
-    $startDate = strtotime('last Monday -6 week', $endDate);
+    $startDate = strtotime("last Monday -{$rangeMonth} month +1 day", $date);
+    $dateRange = [$startDate, $date];
     break;
   case 'month':
+    $rangeMonth = 12;
     $dimensionValue = 'ga:nthMonth';
-    $ageTime = NULL;
-    $startDate = strtotime('first day of -6 month', $endDate);
+    $startDate = strtotime("first day of -{$rangeMonth} month", $date);
+    $dateRange = [$startDate, $date];
     break;
   default:
     $dimensionValue = NULL;
@@ -38,12 +50,17 @@ if ($dimensionValue == NULL) {
 require_once __DIR__ . '/vendor/autoload.php';
 
 $analytics = initializeAnalytics();
-$response = getReport($analytics, [
-  'startDate' => $startDate,
-  'endDate' => $endDate,
-  'ageTime' => $ageTime,
+
+$options = [
+  'startDate' => $dateRange[0],
+  'endDate' => $dateRange[1],
   'dimensionValue' => $dimensionValue
-]);
+];
+if ($ageDateRange != NULL) {
+  $options['ageStartDate'] = $ageDateRange[0];
+  $options['ageEndDate'] = $ageDateRange[1];
+}
+$response = getReport($analytics, $options);
 
 function initializeAnalytics()
 {
@@ -67,24 +84,25 @@ function initializeAnalytics()
 function getReport($analytics, $options)
 {
   extract($options = array_merge([
-    'startDate' => strtotime('-7 day'),
-    'endDate' => strtotime('-1 day'),
-    'ageTime' => NULL,
+    'startDate' => '7daysago',
+    'endDate' => '1daysago',
+    'ageStartDate' => NULL,
+    'ageEndDate' => NULL,
     'dimensionValue' => 'ga:nthDay'
   ], $options));
   
   // Replace with your view ID, for example XXXX.
   $VIEW_ID = '44262736';
+/*   $VIEW_ID = '158197120'; */
 
   // Create the DateRange object.
   $dateRange = new Google_Service_AnalyticsReporting_DateRange();
   $dateRange->setStartDate(date('Y-m-d', $startDate));
   $dateRange->setEndDate(date('Y-m-d', $endDate));
-  
-  if ($ageTime != NULL) {
+  if (($ageStartDate != NULL) && ($ageEndDate != NULL)) {
     $dateRange2 = new Google_Service_AnalyticsReporting_DateRange();
-    $dateRange2->setStartDate(date('Y-m-d', ($startDate - $ageTime)));
-    $dateRange2->setEndDate(date('Y-m-d', ($endDate - $ageTime)));
+    $dateRange2->setStartDate(date('Y-m-d', $ageStartDate));
+    $dateRange2->setEndDate(date('Y-m-d', $ageEndDate));
     $dateRanges = array($dateRange, $dateRange2);
   } else {
     $dateRanges = array($dateRange);
@@ -115,7 +133,7 @@ function getReport($analytics, $options)
   return $analytics->reports->batchGet($body);
 }
 
-function convertResults($reports, $startDate, $endDate)
+function convertResults($reports, $ranges)
 {
   $data_total = [];
   $data_header = new stdClass();
@@ -164,68 +182,116 @@ function convertResults($reports, $startDate, $endDate)
     }
     
     // rows
+    $row_temps = [];
     $rows = $report->getData()->getRows();
-    $max = count($rows);
-    for ($i = 0; $i < $max; $i++) {
-      $row = $rows[$i];
-      
-      $data = new stdClass();
-      $data->metrics = [];
+    foreach ($rows as $row) {
       
       // dimensions
+      $dimension = NULL;
       $dimensions = $row->getDimensions();
-      $d_max = count($dimensions);
-      for ($d_i = 0; $d_i < $d_max; $d_i++) {
-        $name = $dimensions[$d_i];
-        $data->name = $name;
-        $data->date = $startDate;
-        $data->date2 = NULL;
-        
-        switch ($data_header->dimension) {
-          case 'ga:nthDay':
-            $startDate += 24 * 60 * 60;
-            break;
-          case 'ga:nthWeek':
-            $startDate = strtotime('next Monday', $startDate);
-            $data->date2 = strtotime('-1 day', $startDate);
-            break;
-          case 'ga:nthMonth':
-            $startDate = strtotime('first day of +1 month', $startDate);
-            $data->date2 = strtotime('-1 day', $startDate);
-            break;
-          default:
-            break;
-        }
-        
-        if ($data->date2 != NULL) {
-          if ($data->date2 > $endDate) {
-            $data->date2 = $endDate;
-          }
-        }
+      foreach ($dimensions as $d) {
+        $dimension = $d;
         break;
+      }
+      
+      if ($dimension == NULL) {
+        continue;
       }
       
       // metrics
       $metrics = $row->getMetrics();
-      $m_max = count($metrics);
-      for ($m_i = 0; $m_i < $m_max; $m_i++) {
-        $metric = $metrics[$m_i];
-        $values = $metric->getValues();
-        $v_max = min(count($values), $entry_max);
-        for ($v_i = 0; $v_i < $v_max; $v_i++) {
-          $entry = $metric_headers[$v_i];
-          $name = $entry->getName();
-          $value = $values[$v_i];
-          
-          if (!isset($data->metrics[$name])) {
-            $data->metrics[$name] = [];
-          }
-          $data->metrics[$name][$m_i] = _v($value, $entry->getType());
+      foreach ($metrics as $i => $metric) {
+        if (isset($row_temps[$i]) == NULL) {
+          $row_temps[$i] = [];
         }
+        if (isset($row_temps[$i][$dimension]) == NULL) {
+          $row_temps[$i][$dimension] = [];
+        }
+        $row_temps[$i][$dimension] = $metric->getValues();
       }
+    }
+    
+    // marge
+    foreach ($ranges as $r_i => $range) {
+      if ($range == NULL) {
+        continue;
+      }
+      $startDate = $range[0];
+      $endDate = $range[1];
+      $datas = [];
       
-      // append
-      $data_rows[] = $data;
+      $i = 0;
+      while ($startDate <= $endDate) {
+        $data = new stdClass();
+        $data->metrics = [];
+        $data->date1 = $startDate;
+        $data->date2 = NULL;
+        
+        switch ($data_header->dimension) {
+          case 'ga:nthDay':
+          case 'ga:day':
+            $startDate = strtotime('+1 day', $startDate);
+            break;
+          case 'ga:nthWeek':
+          case 'ga:week':
+            $startDate = strtotime('next Sunday', $startDate);
+            $data->date2 = strtotime('-1 days', $startDate);
+            break;
+          case 'ga:nthMonth':
+          case 'ga:month':
+            $startDate = strtotime('next Month', $startDate);
+            $data->date2 = strtotime('-1 days', $startDate);
+            break;
+          default:
+            $startDate = $endDate + 1;
+            break;
+        }
+        if (($data->date2 != NULL) && ($data->date2 > $endDate)) {
+          $data->date2 = $endDate;
+        }
+        
+        switch ($data_header->dimension) {
+          case 'ga:nthDay':
+          case 'ga:nthWeek':
+          case 'ga:nthMonth':
+            $data->name = sprintf('%04d', $i);
+            break;
+          case 'ga:day':
+            $data->name = date('d', $data->date1);
+            break;
+          case 'ga:week':
+            $data->name = date('W', $data->date2);
+            break;
+          case 'ga:month':
+            $data->name = date('m', $data->date2);
+            break;
+          default:
+            $data->name = $i;
+            break;
+        }
+        
+        $temps = NULL;
+        if (isset($row_temps[$r_i]) && (isset($row_temps[$r_i][$data->name]))) {
+          $temps = $row_temps[$r_i][$data->name];
+        }
+        
+        for ($j = 0; $j < $entry_max; $j++) {
+          $entry = $metric_headers[$j];
+          $name = $entry->getName();
+          $data->metrics[$name] = new stdClass();
+          $data->metrics[$name]->type = $entry->getType();
+          $data->metrics[$name]->value = 0;
+          
+          if (($temps != NULL) && (isset($temps[$j]))){
+            $data->metrics[$name]->value = $temps[$j];
+          }
+        }
+        
+        // append
+        $datas[] = $data;
+        $i++;
+      }
+      $data_rows[] = $datas;
     }
   }
   
@@ -235,7 +301,8 @@ function convertResults($reports, $startDate, $endDate)
   $result->rows = $data_rows;
   return $result;
 }
-$datas = convertResults($response, $startDate, $endDate);
+
+$datas = convertResults($response, [$dateRange, $ageDateRange]);
 ?>
 <!doctype html>
 <html lang="ja">
@@ -253,7 +320,7 @@ $datas = convertResults($response, $startDate, $endDate);
   <div class="container">
     <div class="dashboard">
       <p class="address">http://syake-labo.com</p>
-      <p>期間：<?= date('Y/m/d', $startDate) ?> - <?= date('Y/m/d', $endDate) ?></p>
+      <p>期間：<?= date('Y/m/d', $dateRange[0]) ?> - <?= date('Y/m/d', $dateRange[1]) ?><?php if ($ageDay != NULL) : ?><br><small><?= $ageDay ?>日前との比較</small><?php endif; ?></p>
     </div><!-- /.dashboard -->
     <section class="dashboard">
       <h2>Totals</h2>
@@ -275,30 +342,32 @@ $datas = convertResults($response, $startDate, $endDate);
         <thead>
           <tr>
             <th></th>
-            <th><?= _n($datas->header->dimension) ?></th>
+            <th colspan="2"><?= _n($datas->header->dimension) ?></th>
 <?php foreach ($datas->header->metrics as $metric) : ?>
             <td><?= _n($metric) ?></td>
 <?php endforeach; ?>
           </tr>
         </thead>
         <tbody>
-<?php $max = count($datas->rows); for ($i = 0; $i < $max; $i++) : $row = $datas->rows[$i]; ?>
+<?php foreach ($datas->rows[0] as $i => $data) : ?>
           <tr>
             <th class="num"><?= ($i + 1) ?>.</th>
-<?php if ($row->date2 != NULL) : ?>
-            <th><?= date('Y/m/d', $row->date) ?> - <?= date('m/d', $row->date2) ?></th>
+            <th><?= $data->name ?></th>
+<?php if ($data->date2 != NULL) : ?>
+            <th><?= date('Y/m/d', $data->date1) ?> - <?= date('m/d', $data->date2) ?></th>
 <?php else: ?>
-            <th><?= date('Y/m/d <\s\m\a\l\l>(D)</\s\m\a\l\l>', $row->date) ?></th>
+            <th><?= date('Y/m/d <\s\m\a\l\l>(D)</\s\m\a\l\l>', $data->date1) ?></th>
 <?php endif; ?>
-<?php foreach ($row->metrics as $name => $metric) : ?>
-<?php if (count($metric) > 1) : ?>
-            <td><?= $metric[0] ?> <small>(<?= $metric[1] ?>)</small></td>
-<?php else: ?>
-            <td><?= $metric[0] ?></td>
+<?php foreach ($data->metrics as $name => $metric) : ?>
+            <td>
+              <?= _v($metric->value, $metric->type) ?>
+<?php if (isset($datas->rows[1])) : ?>
+              <small>(<?= _v($datas->rows[1][$i]->metrics[$name]->value, $datas->rows[1][$i]->metrics[$name]->type) ?>)</small>
 <?php endif; ?>
+            </td>
 <?php endforeach; ?>
           </tr>
-<?php endfor; ?>
+<?php endforeach; ?>
         </tbody>
       </table>
     </div><!-- /.dashboard -->

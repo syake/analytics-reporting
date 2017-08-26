@@ -48,12 +48,15 @@ function _n($name)
       $name = 'ページ';
       break;
     case 'ga:nthDay':
+    case 'ga:day':
       $name = '日';
       break;
     case 'ga:nthWeek':
+    case 'ga:week':
       $name = '週';
       break;
     case 'ga:nthMonth':
+    case 'ga:month':
       $name = '月';
       break;
     default:
