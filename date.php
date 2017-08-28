@@ -8,6 +8,7 @@ $rangeMonth = NULL;
 $ageDay = NULL;
 $dateRange = NULL;
 $ageDateRange = NULL;
+$metrics = ['ga:users', 'ga:sessions', 'ga:bounceRate', 'ga:avgSessionDuration', 'ga:pageviews'];
 
 // request
 $request = NULL;
@@ -16,7 +17,7 @@ if (isset($_GET['request'])) {
 }
 switch ($request) {
   case 'day':
-    $dimensionValue = 'ga:nthDay';
+    $dimension = 'ga:nthDay';
     $startDate = strtotime("-{$rangeDay} day", $date);
     $dateRange = [$startDate, $date];
     
@@ -27,21 +28,21 @@ switch ($request) {
     break;
   case 'week':
     $rangeMonth = 3;
-    $dimensionValue = 'ga:nthWeek';
+    $dimension = 'ga:nthWeek';
     $startDate = strtotime("last Monday -{$rangeMonth} month +1 day", $date);
     $dateRange = [$startDate, $date];
     break;
   case 'month':
     $rangeMonth = 12;
-    $dimensionValue = 'ga:nthMonth';
+    $dimension = 'ga:nthMonth';
     $startDate = strtotime("first day of -{$rangeMonth} month", $date);
     $dateRange = [$startDate, $date];
     break;
   default:
-    $dimensionValue = NULL;
+    $dimension = NULL;
     break;
 }
-if ($dimensionValue == NULL) {
+if ($dimension == NULL) {
   print('error');
   exit(0);
 }
@@ -54,7 +55,8 @@ $analytics = initializeAnalytics();
 $options = [
   'startDate' => $dateRange[0],
   'endDate' => $dateRange[1],
-  'dimensionValue' => $dimensionValue
+  'dimensionValue' => $dimension,
+  'metricValues' => $metrics
 ];
 if ($ageDateRange != NULL) {
   $options['ageStartDate'] = $ageDateRange[0];
@@ -88,7 +90,8 @@ function getReport($analytics, $options)
     'endDate' => '1daysago',
     'ageStartDate' => NULL,
     'ageEndDate' => NULL,
-    'dimensionValue' => 'ga:nthDay'
+    'dimensionValue' => 'ga:nthDay',
+    'metricValues' => []
   ], $options));
   
   // Replace with your view ID, for example XXXX.
@@ -109,12 +112,13 @@ function getReport($analytics, $options)
   }
   
   // Create the Metrics object.
-  $metricValues = ['ga:users', 'ga:sessions', 'ga:bounceRate', 'ga:avgSessionDuration', 'ga:pageviews'];
   $metrics = [];
-  foreach ($metricValues as $value) {
-    $metric = new Google_Service_AnalyticsReporting_Metric();
-    $metric->setExpression($value);
-    $metrics[] = $metric;
+  if ($metricValues != NULL) {
+    foreach ($metricValues as $value) {
+      $metric = new Google_Service_AnalyticsReporting_Metric();
+      $metric->setExpression($value);
+      $metrics[] = $metric;
+    }
   }
   
   // Create the Dimensions object.
@@ -135,50 +139,44 @@ function getReport($analytics, $options)
 
 function convertResults($reports, $ranges)
 {
-  $data_total = [];
-  $data_header = new stdClass();
-  $data_header->metrics = [];
-  $data_rows = [];
+  $datas = [];
   
   foreach ($reports as $report) {
+    $dimension_header = NULL;
+    
     $header = $report->getColumnHeader();
     $metric_headers = $header->getMetricHeader()->getMetricHeaderEntries();
     $entry_max = count($metric_headers);
     
-    $dimension_headers = $header->getDimensions();
-    $dimension_max = count($dimension_headers);
-    
     // totals
     $totals = $report->getData()->getTotals();
     $max = count($totals);
-    for ($i = 0; $i < $max; $i++) {
-      $total = $totals[$i];
-      
+    foreach ($totals as $i => $total) {
+      $total_data = [];
       $values = $total->getValues();
       $v_max = min(count($values), $entry_max);
       for ($v_i = 0; $v_i < $v_max; $v_i++) {
         $entry = $metric_headers[$v_i];
-        $name = $entry->getName();
-        $value = $values[$v_i];
-        
-        // append
-        if (!isset($data_total[$name])) {
-          $data_total[$name] = new stdClass();
-          $data_total[$name]->values = [];
-        }
-        $data_total[$name]->values[] = _v($value, $entry->getType());
+        $data = new stdClass();
+        $data->name = $entry->getName();
+        $data->type = $entry->getType();
+        $data->value = $values[$v_i];
+        $total_data[] = $data;
       }
+      
+      // append
+      if (isset($datas[$i]) == NULL) {
+        $datas[$i] = new stdClass();
+      }
+      $datas[$i]->total = $total_data;
+      $datas[$i]->rows = [];
     }
     
     // header
-    for ($d_i = 0; $d_i < $dimension_max; $d_i++) {
-      $key = $dimension_headers[$d_i];
-      $data_header->dimension = $key;
+    $dimension_headers = $header->getDimensions();
+    foreach ($dimension_headers as $dimension_header_) {
+      $dimension_header = $dimension_header_;
       break;
-    }
-    for ($v_i = 0; $v_i < $entry_max; $v_i++) {
-      $entry = $metric_headers[$v_i];
-      $data_header->metrics[] = $entry->getName();
     }
     
     // rows
@@ -218,7 +216,7 @@ function convertResults($reports, $ranges)
       }
       $startDate = $range[0];
       $endDate = $range[1];
-      $datas = [];
+      $row_datas = [];
       
       $i = 0;
       while ($startDate <= $endDate) {
@@ -227,7 +225,7 @@ function convertResults($reports, $ranges)
         $data->date1 = $startDate;
         $data->date2 = NULL;
         
-        switch ($data_header->dimension) {
+        switch ($dimension_header) {
           case 'ga:nthDay':
           case 'ga:day':
             $startDate = strtotime('+1 day', $startDate);
@@ -250,7 +248,7 @@ function convertResults($reports, $ranges)
           $data->date2 = $endDate;
         }
         
-        switch ($data_header->dimension) {
+        switch ($dimension_header) {
           case 'ga:nthDay':
           case 'ga:nthWeek':
           case 'ga:nthMonth':
@@ -288,21 +286,24 @@ function convertResults($reports, $ranges)
         }
         
         // append
-        $datas[] = $data;
+        $row_datas[] = $data;
         $i++;
       }
-      $data_rows[] = $datas;
+      
+      // append
+      $datas[$r_i]->rows = $row_datas;
     }
   }
   
-  $result = new stdClass();
-  $result->total = $data_total;
-  $result->header = $data_header;
-  $result->rows = $data_rows;
-  return $result;
+  return $datas;
 }
 
 $datas = convertResults($response, [$dateRange, $ageDateRange]);
+$data = $datas[0];
+$ageData = NULL;
+if (isset($datas[1])) {
+  $ageData = $datas[1];
+}
 ?>
 <!doctype html>
 <html lang="ja">
@@ -326,12 +327,13 @@ $datas = convertResults($response, [$dateRange, $ageDateRange]);
       <h2>Totals</h2>
       <table class="table">
         <tbody>
-<?php foreach ($datas->total as $name => $total) : ?>
+<?php foreach ($data->total as $i => $total) : ?>
           <tr>
-            <th><?= _n($name) ?></th>
-<?php foreach ($total->values as $value) : ?>
-            <td><?= $value ?></td>
-<?php endforeach; ?>
+            <th><?= _n($total->name) ?></th>
+            <td><?= _v($total->value, $total->type) ?></td>
+<?php if ($ageData != NULL) : ?>
+            <td><?= _v($ageData->total[$i]->value, $ageData->total[$i]->type) ?></td>
+<?php endif; ?>
           </tr>
 <?php endforeach; ?>
         </tbody>
@@ -342,27 +344,27 @@ $datas = convertResults($response, [$dateRange, $ageDateRange]);
         <thead>
           <tr>
             <th></th>
-            <th colspan="2"><?= _n($datas->header->dimension) ?></th>
-<?php foreach ($datas->header->metrics as $metric) : ?>
-            <td><?= _n($metric) ?></td>
+            <th colspan="2"><?= _n($dimension) ?></th>
+<?php foreach ($metrics as $name) : ?>
+            <td><?= _n($name) ?></td>
 <?php endforeach; ?>
           </tr>
         </thead>
         <tbody>
-<?php foreach ($datas->rows[0] as $i => $data) : ?>
+<?php foreach ($data->rows as $i => $row) : ?>
           <tr>
             <th class="num"><?= ($i + 1) ?>.</th>
-            <th><?= $data->name ?></th>
-<?php if ($data->date2 != NULL) : ?>
-            <th><?= date('Y/m/d', $data->date1) ?> - <?= date('m/d', $data->date2) ?></th>
+            <th><?= $row->name ?></th>
+<?php if ($row->date2 != NULL) : ?>
+            <th><?= date('Y/m/d', $row->date1) ?> - <?= date('m/d', $row->date2) ?></th>
 <?php else: ?>
-            <th><?= date('Y/m/d <\s\m\a\l\l>(D)</\s\m\a\l\l>', $data->date1) ?></th>
+            <th><?= date('Y/m/d <\s\m\a\l\l>(D)</\s\m\a\l\l>', $row->date1) ?></th>
 <?php endif; ?>
-<?php foreach ($data->metrics as $name => $metric) : ?>
+<?php foreach ($row->metrics as $name => $metric) : ?>
             <td>
               <?= _v($metric->value, $metric->type) ?>
-<?php if (isset($datas->rows[1])) : ?>
-              <small>(<?= _v($datas->rows[1][$i]->metrics[$name]->value, $datas->rows[1][$i]->metrics[$name]->type) ?>)</small>
+<?php if ($ageData != NULL) : ?>
+              <small>(<?= _v($ageData->rows[$i]->metrics[$name]->value, $ageData->rows[$i]->metrics[$name]->type) ?>)</small>
 <?php endif; ?>
             </td>
 <?php endforeach; ?>
