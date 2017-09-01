@@ -229,7 +229,7 @@ function convertResults($reports)
 }
 $datas = convertResults($response);
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
