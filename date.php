@@ -10,6 +10,9 @@ $dateRange = NULL;
 $ageDateRange = NULL;
 $metrics = ['ga:users', 'ga:sessions', 'ga:bounceRate', 'ga:avgSessionDuration', 'ga:pageviews'];
 
+// default
+$request = 'day';
+
 // request
 $request = NULL;
 if (isset($_GET['request'])) {
@@ -297,15 +300,15 @@ function convertResults($reports, $ranges)
   
   return $datas;
 }
-
 $datas = convertResults($response, [$dateRange, $ageDateRange]);
+
 $data = $datas[0];
 $ageData = NULL;
 if (isset($datas[1])) {
   $ageData = $datas[1];
 }
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
