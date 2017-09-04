@@ -6,4 +6,8 @@
   RewriteRule (page|region) report.php/?%{QUERY_STRING}&request=$1 [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteRule (day|week|month) date.php/?%{QUERY_STRING}&request=$1 [L]
+  
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_FILENAME}\.php -f
+  RewriteRule ^(api)$ $1.php
 </IfModule>
