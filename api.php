@@ -10,7 +10,7 @@ $request = array_merge([
   'startDate' => date('Y-m-d', strtotime('-7 day')),
   'endDate' => date('Y-m-d', strtotime('-1 day')),
   'diff' => 7,
-  'dimension' => 'ga:nthDay',
+  'dimensions' => ['ga:nthDay'],
   'metrics' => []
 ], $request);
 
@@ -52,6 +52,8 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 $analytics = initializeAnalytics();
 $response = getReport($analytics, $ranges, $request);
+$datas = convertResults($response, $ranges[0]);
+echo json_encode($datas, JSON_PRETTY_PRINT);
 
 function initializeAnalytics()
 {
@@ -100,14 +102,20 @@ function getReport($analytics, $ranges, $options)
   }
   
   // Create the Dimensions object.
-  $g_dimension = new Google_Service_AnalyticsReporting_Dimension();
-  $g_dimension->setName($dimension);
+  $g_dimensions = [];
+  if ($dimensions != NULL) {
+    foreach ($dimensions as $value) {
+      $g_dimension = new Google_Service_AnalyticsReporting_Dimension();
+      $g_dimension->setName($value);
+      $g_dimensions[] = $g_dimension;
+    }
+  }
   
   // Create the ReportRequest object.
   $request = new Google_Service_AnalyticsReporting_ReportRequest();
   $request->setViewId($VIEW_ID);
   $request->setDateRanges($g_dateRanges);
-  $request->setDimensions(array($g_dimension));
+  $request->setDimensions($g_dimensions);
   $request->setMetrics($g_metrics);
 
   $body = new Google_Service_AnalyticsReporting_GetReportsRequest();
@@ -115,95 +123,93 @@ function getReport($analytics, $ranges, $options)
   return $analytics->reports->batchGet($body);
 }
 
-function convertResults($reports, $ranges)
+function convertResults($reports, $range)
 {
-  $datas = [];
+  $datas = new stdClass();
+  $data_totals = [];
+  $data_rows = [];
   
   foreach ($reports as $report) {
-    $dimension_header = NULL;
-    
     $header = $report->getColumnHeader();
     $metric_headers = $header->getMetricHeader()->getMetricHeaderEntries();
     $entry_max = count($metric_headers);
     
     // totals
-    $totals = $report->getData()->getTotals();
-    $max = count($totals);
-    foreach ($totals as $i => $total) {
-      $total_data = [];
-      $values = $total->getValues();
-      $v_max = min(count($values), $entry_max);
-      for ($v_i = 0; $v_i < $v_max; $v_i++) {
-        $entry = $metric_headers[$v_i];
-        $data = new stdClass();
-        $data->name = $entry->getName();
-        $data->type = $entry->getType();
-        $data->value = $values[$v_i];
-        $total_data[] = $data;
-      }
-      
-      // append
-      if (isset($datas[$i]) == NULL) {
-        $datas[$i] = new stdClass();
-      }
-      $datas[$i]->total = $total_data;
-      $datas[$i]->rows = [];
+    foreach ($metric_headers as $i => $entry) {
+      $data = new stdClass();
+      $data->name = $entry->getName();
+      $data->type = $entry->getType();
+      $data->values = [];
+      $data_totals[$i] = $data;
     }
-    
-    // header
-    $dimension_headers = $header->getDimensions();
-    foreach ($dimension_headers as $dimension_header_) {
-      $dimension_header = $dimension_header_;
-      break;
+    $totals = $report->getData()->getTotals();
+    foreach ($totals as $i => $total) {
+      $values = $total->getValues();
+      foreach ($values as $j => $value) {
+        if (isset($data_totals[$j])) {
+          $data_totals[$j]->values[$i] = $value;
+        }
+      }
     }
     
     // rows
     $row_temps = [];
     $rows = $report->getData()->getRows();
     foreach ($rows as $row) {
+      $temps = [];
       
       // dimensions
-      $dimension = NULL;
-      $dimensions = $row->getDimensions();
-      foreach ($dimensions as $d) {
-        $dimension = $d;
-        break;
-      }
-      
-      if ($dimension == NULL) {
-        continue;
-      }
+      $temps['dimensions'] = $row->getDimensions();
       
       // metrics
+      $temps['metrics'] = [];
       $metrics = $row->getMetrics();
       foreach ($metrics as $i => $metric) {
-        if (isset($row_temps[$i]) == NULL) {
-          $row_temps[$i] = [];
+        $values = $metric->getValues();
+        foreach ($values as $j => $value) {
+          if (isset($temps['metrics'][$j]) == NULL) {
+            $temps['metrics'][$j] = [];
+          }
+          $temps['metrics'][$j][$i] = $value;
         }
-        if (isset($row_temps[$i][$dimension]) == NULL) {
-          $row_temps[$i][$dimension] = [];
-        }
-        $row_temps[$i][$dimension] = $metric->getValues();
+      }
+      $row_temps[] = $temps;
+    }
+    
+    // dimensions
+    $date_dimension_index = -1;
+    $date_dimension = NULL;
+    $dimension_headers = $header->getDimensions();
+    foreach ($dimension_headers as $i => $dimension_header) {
+      switch ($dimension_header) {
+        case 'ga:nthDay':
+        case 'ga:day':
+        case 'ga:nthWeek':
+        case 'ga:week':
+        case 'ga:nthMonth':
+        case 'ga:month':
+          $date_dimension_index = $i;
+          $date_dimension = $dimension_header;
+          break 2;
+        default:
+          break;
       }
     }
     
     // marge
-    foreach ($ranges as $r_i => $range) {
-      if ($range == NULL) {
-        continue;
-      }
+    if ($date_dimension != NULL) {
       $startDate = $range[0];
       $endDate = $range[1];
-      $row_datas = [];
       
       $i = 0;
       while ($startDate <= $endDate) {
         $data = new stdClass();
+        $data->dimensions = [];
         $data->metrics = [];
         $data->date1 = $startDate;
         $data->date2 = NULL;
         
-        switch ($dimension_header) {
+        switch ($date_dimension) {
           case 'ga:nthDay':
           case 'ga:day':
             $startDate = strtotime('+1 day', $startDate);
@@ -226,55 +232,94 @@ function convertResults($reports, $ranges)
           $data->date2 = $endDate;
         }
         
-        switch ($dimension_header) {
+        switch ($date_dimension) {
           case 'ga:nthDay':
           case 'ga:nthWeek':
           case 'ga:nthMonth':
-            $data->name = sprintf('%04d', $i);
+            $dimension = sprintf('%04d', $i);
             break;
           case 'ga:day':
-            $data->name = date('d', $data->date1);
+            $dimension = date('d', $data->date1);
             break;
           case 'ga:week':
-            $data->name = date('W', $data->date2);
+            $dimension = date('W', $data->date2);
             break;
           case 'ga:month':
-            $data->name = date('m', $data->date2);
+            $dimension = date('m', $data->date2);
             break;
           default:
-            $data->name = $i;
+            $dimension = $i;
             break;
         }
         
-        $temps = NULL;
-        if (isset($row_temps[$r_i]) && (isset($row_temps[$r_i][$data->name]))) {
-          $temps = $row_temps[$r_i][$data->name];
+        $metrics_temps = NULL;
+        foreach ($row_temps as $temps) {
+          if (isset($temps['dimensions'][$date_dimension_index])) {
+            $temp_dimension = $temps['dimensions'][$date_dimension_index];
+            if ($temp_dimension == $dimension) {
+              $data->dimensions = $temps['dimensions'];
+              $metrics_temps = $temps['metrics'];
+              break;
+            }
+          }
         }
         
         for ($j = 0; $j < $entry_max; $j++) {
           $entry = $metric_headers[$j];
           $name = $entry->getName();
-          $data->metrics[$name] = new stdClass();
-          $data->metrics[$name]->type = $entry->getType();
-          $data->metrics[$name]->value = 0;
+          $metrics = new stdClass();
+          $metrics->type = $entry->getType();
+          $metrics->values = [0];
           
-          if (($temps != NULL) && (isset($temps[$j]))){
-            $data->metrics[$name]->value = $temps[$j];
+          if (($metrics_temps != NULL) && (isset($metrics_temps[$j]))){
+            $metrics->values = $metrics_temps[$j];
           }
+          $data->metrics[$name] = $metrics;
         }
         
         // append
-        $row_datas[] = $data;
+        $data_rows[] = $data;
         $i++;
       }
+    } else {
       
-      // append
-      $datas[$r_i]->rows = $row_datas;
+      // marge
+      foreach ($row_temps as $temps) {
+        $data = new stdClass();
+        $data->dimensions = $temps['dimensions'];
+        $data->metrics = [];
+        
+        foreach ($metric_headers as $entry) {
+          $name = $entry->getName();
+          $metrics = new stdClass();
+          $metrics->type = $entry->getType();
+/*
+          $metrics_values = [];
+          foreach ($temps['metrics'] as $m_i => $temp_values) {
+            foreach ($temp_values as $v_i => $temp_value) {
+              if (isset($dimension_headers[$v_i])) {
+                $dimension_header = $dimension_headers[$v_i];
+              }
+              if (isset($metrics_values[$m_i]) == NULL) {
+                $metrics_values[$m_i] = [];
+              }
+              $metrics_values[$m_i][$dimension_header] = $temp_value;
+            }
+          }
+          $metrics->values = $metrics_values;
+*/
+          $metrics->values = $temps['metrics'];
+          $data->metrics[$name] = $metrics;
+        }
+        
+        // append
+        $data_rows[] = $data;
+      }
     }
+    
+    $datas->totals = $data_totals;
+    $datas->rows = $data_rows;
   }
   
   return $datas;
 }
-
-$datas = convertResults($response, $ranges);
-echo json_encode($datas, JSON_PRETTY_PRINT);

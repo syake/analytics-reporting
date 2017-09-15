@@ -54,11 +54,13 @@ main {
 /* dashboard
 -------------------------------------------*/
 .dashboard {
+  position: relative;
   padding: 20px;
   background-color: white;
   border: 1px solid #d4d2d0;
   border-radius: 4px;
   margin-bottom: 2rem;
+  min-height: 400px;
 }
 .dashboard small {
   font-size: 0.75rem;
@@ -108,4 +110,14 @@ main {
 .dashboard table.table-rows small {
   font-size: 0.75rem;
   color: #b7b7b7;
+}
+
+.dashboard a.api-btn {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+}
+.dashboard a.api-btn .fa {
+  margin-left: 0.2em;
+  font-size: 0.8rem;
 }

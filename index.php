@@ -24,25 +24,34 @@ $dateAges = [7, 28, 90];
     <div class="dashboard">
       <p class="address">http://syake-labo.com</p>
       <div id="rangeMenu" class="dropdown">
-        期間：<a href="javascript:void(0)" class="dropdown-toggle" id="rangeLabel" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><?php $age = $dateAges[0] ?><?= date('Y/m/d', strtotime("-{$age} day", $date)) ?> - <?= date('Y/m/d', $date) ?></a>
+        期間：<a href="javascript:void(0)" class="dropdown-toggle" id="rangeLabel" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><?php $diff = ($dateAges[0] - 1) ?><?= date('Y/m/d', strtotime("-{$diff} day", $date)) ?> - <?= date('Y/m/d', $date) ?></a>
         <div class="dropdown-menu" aria-labelledby="rangeLabel">
-<?php foreach ($dateAges as $i => $age) : ?>
-          <button class="dropdown-item" data-start="<?= date('Y-m-d', strtotime("-{$age} day", $date)) ?>" data-end="<?= date('Y-m-d', $date) ?>" data-diff="<?= $age ?>" type="button">過去 <?= $age ?> 日前</button>
+<?php foreach ($dateAges as $i => $age): $diff = $age; ?>
+          <button class="dropdown-item" data-start="<?= date('Y-m-d', strtotime("-{$diff} day", $date)) ?>" data-end="<?= date('Y-m-d', $date) ?>" data-diff="<?= $diff ?>" type="button">過去 <?= $age ?> 日前</button>
 <?php endforeach; ?>
         </div>
       </div>
     </div><!-- /.dashboard -->
     
-    <div id="chart-1-container" class="dashboard" data-request="day"></div>
+    <div class="dashboard">
+      <div id="chart-1-container" class="report"></div>
+    </div>
     <div class="row">
       <div class="col-sm-12">
-        <div id="chart-2-container" class="dashboard"></div>
+        <div class="dashboard">
+          <div id="chart-2-container" class="report"></div>
+          <div id="chart-3-container" class="report"></div>
+        </div>
       </div>
       <div class="col-sm-6">
-        <div id="chart-3-container" class="dashboard"></div>
+        <div class="dashboard">
+          <div id="chart-4-container" class="report"></div>
+        </div>
       </div>
       <div class="col-sm-6">
-        <div id="chart-4-container" class="dashboard"></div>
+        <div class="dashboard">
+          <div id="chart-5-container" class="report"></div>
+        </div>
       </div>
     </div>
     
